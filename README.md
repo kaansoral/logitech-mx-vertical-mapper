@@ -14,6 +14,18 @@ Built natively in Swift using `CGEventTap` and the **Logitech HID++ 2.0 protocol
 
 The side buttons are intercepted via `CGEventTap`. The DPI/top button requires **HID++ 2.0 protocol communication** because it's handled by the mouse firmware and doesn't produce a standard mouse event — the app diverts it using the `REPROG_CONTROLS_V4` HID++ feature so it reports to macOS instead of cycling DPI.
 
+## Connection Types
+
+| Connection | Status |
+|------------|--------|
+| USB cable (wired) | Tested, works |
+| 2.4 GHz USB receiver (Unifying/Bolt) | Tested, works |
+| Bluetooth | Untested |
+
+The app supports both **USB cable** and **2.4 GHz wireless receiver** connections and can switch between them on the fly. Bluetooth is untested — Logitech's Bluetooth implementation has always been jittery, so the 2.4 GHz receiver or USB cable is recommended.
+
+If you switch connection types (e.g., unplug cable and switch to receiver), use the **"Reconnect HID++"** button in the menu bar to reinitialize the HID++ connection.
+
 ## Why This Exists
 
 The Logitech MX Vertical is a great ergonomic mouse, but customizing its buttons on macOS typically requires **Logi Options+** — a bloated Electron app that installs background services and kernel extensions.
@@ -24,7 +36,7 @@ This app replaces all of that with a ~20KB native binary. It:
 - Starts at login automatically
 - Reconnects after sleep/wake
 - Uses **zero CPU** when idle (event-driven, no polling)
-- Works with both **USB receiver (Unifying/Bolt)** and **direct Bluetooth** connections
+- Works with **USB cable** and **2.4 GHz receiver (Unifying/Bolt)**
 - Requires only **Accessibility** permission (no kernel extensions, no drivers)
 
 ## Requirements
@@ -59,12 +71,15 @@ On first launch, the app will prompt you to grant **Accessibility** access. This
 
 > If you rebuild the app, macOS invalidates the permission (the binary signature changes). You'll need to **remove and re-add** the app in Accessibility settings, or toggle it off and on.
 
-## Start at Login
+## Menu Bar Controls
 
-The app **automatically enables "Start at Login"** on first launch using macOS `SMAppService`. You can toggle this from the menu bar icon:
+Click the mouse icon in the menu bar to access:
 
-1. Click the mouse icon in the menu bar
-2. Check or uncheck **"Start at Login"**
+| Menu Item | Description |
+|-----------|-------------|
+| **Reconnect HID++** (Cmd+R) | Reinitializes the HID++ connection to the mouse. Use this when switching between USB cable and wireless receiver, or if the DPI button stops responding. |
+| **Start at Login** | Toggle automatic launch at login. Enabled by default on first launch. |
+| **Quit** (Cmd+Q) | Exit the app. |
 
 ## Customizing Button Mappings
 
@@ -103,13 +118,13 @@ The diversion uses the `persist` flag so it survives mouse power cycles. The app
 
 ## Debugging
 
-To enable logging, change line 16 in `AppDelegate.swift`:
+Logging is enabled by default. Logs are written to `~/.mxmapper.log` and reset on each app launch.
+
+To disable logging, change line 16 in `AppDelegate.swift`:
 
 ```swift
-private let loggingEnabled = true
+private let loggingEnabled = false
 ```
-
-Rebuild and reinstall. Logs are written to `~/.mxmapper.log`.
 
 ## Project Structure
 
@@ -123,7 +138,7 @@ build.sh             # Compiles, bundles, and ad-hoc signs the .app
 
 This approach works for any Logitech mouse that supports **HID++ 2.0** and the **REPROG_CONTROLS_V4** feature. To adapt:
 
-1. Find your button's **Control ID (CID)** — change `loggingEnabled` to `true` and enumerate controls via HID++ function 1 on the REPROG feature
+1. Find your button's **Control ID (CID)** — check the logs after connecting, or enumerate controls via HID++ function 1 on the REPROG feature
 2. Update `CID_DPI_BUTTON` with your button's CID
 3. Update the action in `handleDivertedButtonEvent`
 
