@@ -51,9 +51,10 @@ private func postKey(code: UInt16, flags: CGEventFlags) {
 }
 
 private func triggerMissionControl() {
-    // Launch Mission Control via its app bundle
-    let url = URL(fileURLWithPath: "/System/Applications/Mission Control.app")
-    NSWorkspace.shared.openApplication(at: url, configuration: NSWorkspace.OpenConfiguration())
+    DispatchQueue.main.async {
+        let url = URL(fileURLWithPath: "/System/Applications/Mission Control.app")
+        NSWorkspace.shared.openApplication(at: url, configuration: NSWorkspace.OpenConfiguration())
+    }
 }
 
 // MARK: - CGEventTap Callback (side buttons)
@@ -212,6 +213,14 @@ private class HIDPPManager {
 
         guard let deviceSet = IOHIDManagerCopyDevices(mgr) as? Set<IOHIDDevice> else {
             throw HIDPPError.noDevice
+        }
+
+        for dev in deviceSet {
+            let name = IOHIDDeviceGetProperty(dev, kIOHIDProductKey as CFString) as? String ?? "?"
+            let pid = IOHIDDeviceGetProperty(dev, kIOHIDProductIDKey as CFString) as? Int ?? 0
+            let page = IOHIDDeviceGetProperty(dev, kIOHIDPrimaryUsagePageKey as CFString) as? Int ?? 0
+            let maxIn = IOHIDDeviceGetProperty(dev, kIOHIDMaxInputReportSizeKey as CFString) as? Int ?? 0
+            log("  HID: \(name) pid=0x\(String(format:"%04X",pid)) page=0x\(String(format:"%04X",page)) maxIn=\(maxIn)")
         }
 
         // Filter: vendor-specific usage page (HID++) and supports long reports
@@ -522,6 +531,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         hidppManager.forceReconnect()
     }
 
+    @objc private func reconnectHID(_ sender: NSMenuItem) {
+        log("Manual HID++ reconnect requested")
+        hidppManager.forceReconnect()
+    }
+
     // MARK: Accessibility
 
     private func ensureAccessibilityAndStart() {
@@ -580,6 +594,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                                action: nil, keyEquivalent: "")
         title.isEnabled = false
         menu.addItem(title)
+        menu.addItem(.separator())
+
+        let reconnectItem = NSMenuItem(title: "Reconnect HID++",
+                                       action: #selector(reconnectHID(_:)), keyEquivalent: "r")
+        reconnectItem.target = self
+        menu.addItem(reconnectItem)
+
         menu.addItem(.separator())
 
         let loginItem = NSMenuItem(title: "Start at Login",
