@@ -127,6 +127,7 @@ private struct HIDPPResponse {
 private class HIDPPManager {
     private var device: IOHIDDevice?
     private var hidManager: IOHIDManager?
+    private var watchManager: IOHIDManager?  // Watches for device add/remove
     private let reportBuffer: UnsafeMutablePointer<UInt8>
     private var responseQueue: [HIDPPResponse] = []
     private var deviceIndex: UInt8 = 0xFF
@@ -166,6 +167,7 @@ private class HIDPPManager {
         while shouldRun {
             do {
                 try connect()
+                startDeviceWatcher()
                 log("HID++ DPI button diverted — listening")
                 while shouldRun {
                     let result = CFRunLoopRunInMode(.defaultMode, 2.0, false)
@@ -256,6 +258,61 @@ private class HIDPPManager {
             IOHIDDeviceClose(dev, IOOptionBits(kIOHIDOptionsTypeNone))
         }
         device = nil
+    }
+
+    // MARK: Device Watcher (Option A — passive IOKit notifications)
+
+    /// Watches for Logitech HID device add/remove events.
+    /// When the mouse reconnects after sleep or cable change, triggers a reconnect.
+    private var watchStartTime = Date.distantPast
+    private var watchDebounceTime = Date.distantPast
+
+    private func startDeviceWatcher() {
+        stopDeviceWatcher()
+        watchStartTime = Date() // Ignore initial enumeration events
+        let mgr = IOHIDManagerCreate(kCFAllocatorDefault, IOOptionBits(kIOHIDOptionsTypeNone))
+        let matchDict: [String: Any] = [kIOHIDVendorIDKey as String: LOGI_VENDOR_ID]
+        IOHIDManagerSetDeviceMatching(mgr, matchDict as CFDictionary)
+
+        let ctx = Unmanaged.passUnretained(self).toOpaque()
+        IOHIDManagerRegisterDeviceMatchingCallback(mgr, { ctx, _, _, dev in
+            guard let ctx = ctx else { return }
+            let mgr = Unmanaged<HIDPPManager>.fromOpaque(ctx).takeUnretainedValue()
+            mgr.handleDeviceChange(dev, added: true)
+        }, ctx)
+        IOHIDManagerRegisterDeviceRemovalCallback(mgr, { ctx, _, _, dev in
+            guard let ctx = ctx else { return }
+            let mgr = Unmanaged<HIDPPManager>.fromOpaque(ctx).takeUnretainedValue()
+            mgr.handleDeviceChange(dev, added: false)
+        }, ctx)
+
+        IOHIDManagerScheduleWithRunLoop(mgr, CFRunLoopGetCurrent(),
+                                        CFRunLoopMode.defaultMode.rawValue)
+        IOHIDManagerOpen(mgr, IOOptionBits(kIOHIDOptionsTypeNone))
+        watchManager = mgr
+    }
+
+    fileprivate func handleDeviceChange(_ dev: IOHIDDevice, added: Bool) {
+        let now = Date()
+        // Ignore events within 3s of starting watcher (initial enumeration)
+        guard now.timeIntervalSince(watchStartTime) > 3.0 else { return }
+        // Debounce: ignore events within 2s of last handled event
+        guard now.timeIntervalSince(watchDebounceTime) > 2.0 else { return }
+        watchDebounceTime = now
+
+        let name = IOHIDDeviceGetProperty(dev, kIOHIDProductKey as CFString) as? String ?? "?"
+        let action = added ? "added" : "removed"
+        log("HID++ device \(action): \(name) — reconnecting")
+        forceReconnect()
+    }
+
+    private func stopDeviceWatcher() {
+        if let mgr = watchManager {
+            IOHIDManagerUnscheduleFromRunLoop(mgr, CFRunLoopGetCurrent(),
+                                              CFRunLoopMode.defaultMode.rawValue)
+            IOHIDManagerClose(mgr, IOOptionBits(kIOHIDOptionsTypeNone))
+            watchManager = nil
+        }
     }
 
     // MARK: HID++ Protocol
@@ -482,6 +539,7 @@ private class HIDPPManager {
                                  CFIndex(HIDPP_REPORT_LONG), buffer, buffer.count)
         }
         closeDevice()
+        stopDeviceWatcher()
         if let mgr = hidManager {
             IOHIDManagerUnscheduleFromRunLoop(mgr, CFRunLoopGetCurrent(),
                                               CFRunLoopMode.defaultMode.rawValue)
@@ -532,8 +590,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func onSystemWake() {
-        log("System wake — forcing HID++ reconnect")
-        hidppManager.forceReconnect()
+        log("System wake — scheduling HID++ reconnect in 2s")
+        // Delay to let the mouse re-establish its connection after wake
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) { [weak self] in
+            log("System wake — forcing HID++ reconnect")
+            self?.hidppManager.forceReconnect()
+        }
     }
 
     @objc private func reconnectHID(_ sender: NSMenuItem) {
