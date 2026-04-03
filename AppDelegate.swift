@@ -13,7 +13,7 @@ import os
 
 // MARK: - Logging
 
-private let loggingEnabled = false
+private let loggingEnabled = true
 
 private let logger = Logger(subsystem: "com.kaan.LogitechVerticalMXMapper", category: "main")
 private let logFileURL: URL = FileManager.default.homeDirectoryForCurrentUser
@@ -506,6 +506,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private let hidppManager = HIDPPManager()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // Reset log file on each launch
+        try? "".write(to: logFileURL, atomically: true, encoding: .utf8)
         log("App launched")
         setupMenuBar()
         enableLoginItemOnFirstLaunch()
