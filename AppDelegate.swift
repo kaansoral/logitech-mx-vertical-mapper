@@ -50,12 +50,10 @@ private func postKey(code: UInt16, flags: CGEventFlags) {
     up.post(tap: .cgSessionEventTap)
 }
 
-// CoreDock private API — triggers Mission Control directly
-@_silgen_name("CoreDockSendNotification")
-private func CoreDockSendNotification(_ name: CFString, _ unknown: UnsafeMutableRawPointer?) -> Void
-
 private func triggerMissionControl() {
-    CoreDockSendNotification("com.apple.expose.awake" as CFString, nil)
+    // Launch Mission Control via its app bundle
+    let url = URL(fileURLWithPath: "/System/Applications/Mission Control.app")
+    NSWorkspace.shared.openApplication(at: url, configuration: NSWorkspace.OpenConfiguration())
 }
 
 // MARK: - CGEventTap Callback (side buttons)
