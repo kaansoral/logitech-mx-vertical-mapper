@@ -176,7 +176,7 @@ private class HIDPPManager {
             }
             cleanup()
             if shouldRun {
-                Thread.sleep(forTimeInterval: 3.0)
+                Thread.sleep(forTimeInterval: 0.5)
             }
         }
     }
@@ -250,6 +250,9 @@ private class HIDPPManager {
 
     private func closeDevice() {
         if let dev = device {
+            IOHIDDeviceUnscheduleFromRunLoop(dev, CFRunLoopGetCurrent(),
+                                             CFRunLoopMode.defaultMode.rawValue)
+            IOHIDDeviceRegisterInputReportCallback(dev, reportBuffer, 64, nil, nil)
             IOHIDDeviceClose(dev, IOOptionBits(kIOHIDOptionsTypeNone))
         }
         device = nil
@@ -480,6 +483,8 @@ private class HIDPPManager {
         }
         closeDevice()
         if let mgr = hidManager {
+            IOHIDManagerUnscheduleFromRunLoop(mgr, CFRunLoopGetCurrent(),
+                                              CFRunLoopMode.defaultMode.rawValue)
             IOHIDManagerClose(mgr, IOOptionBits(kIOHIDOptionsTypeNone))
             hidManager = nil
         }
