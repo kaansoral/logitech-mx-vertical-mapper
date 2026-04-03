@@ -144,6 +144,10 @@ This approach works for any Logitech mouse that supports **HID++ 2.0** and the *
 
 Compatible mice include: MX Master 3/3S, MX Anywhere 3, MX Ergo, MX Vertical, and most modern Logitech wireless mice.
 
+## Acknowledgments
+
+The HID++ 2.0 protocol implementation was informed by the [Mouser](https://github.com/TomBadash/Mouser) project, which demonstrates HID++ button diversion for Logitech mice using hidapi. This project's approach to feature discovery, button diversion via `REPROG_CONTROLS_V4`, and diverted event parsing was invaluable as a reference. Thank you!
+
 ## License
 
 MIT
